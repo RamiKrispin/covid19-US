@@ -1,0 +1,18 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+# covid19-US
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+Dashboard to track the coronavirus (covid19) pandemic in the US... Work in progress
