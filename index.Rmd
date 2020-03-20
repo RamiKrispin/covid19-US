@@ -1,37 +1,174 @@
 ---
-title: "Untitled"
+title: "Covid19 US"
 output: 
   flexdashboard::flex_dashboard:
-    orientation: columns
+    orientation: rows
+    social: menu
+    source_code: embed
     vertical_layout: fill
 ---
 
 ```{r setup, include=FALSE}
+#------------------ Packages ------------------
 library(flexdashboard)
+library(coronavirus)
+data(coronavirus)
+
+`%>%` <- magrittr::`%>%`
+
+#------------------ Data ------------------
+df <- read.csv("https://covidtracking.com/api/states.csv", stringsAsFactors = FALSE) %>%
+  dplyr::left_join(data.frame(state_name = state.name, state = state.abb, stringsAsFactors = FALSE),
+                   by = "state") %>%
+  dplyr::mutate(text = paste(state_name, "<br>", 
+                             "Total Tested: ", total,"<br>",
+                             "Positive: ", positive,"<br>",
+                             "Negative: ", negative,"<br>",
+                             "Pending: ", pending,"<br>",
+                             "Death:", death))
+
 ```
 
-Column {data-width=650}
------------------------------------------------------------------------
+
+
+
+
+Summary
+=======================================================================
+
+
 
 ### Chart A
 
 ```{r}
+l <- list(color = plotly::toRGB("white"), width = 2)
+# specify some map projection/options
+g <- list(
+  scope = 'usa',
+  projection = list(type = 'albers usa'),
+  showlakes = TRUE,
+  lakecolor = plotly::toRGB('white')
+)
 
+
+p1 <- plotly::plot_geo(df, locationmode = 'USA-states') %>%
+  plotly::add_trace(
+    z = ~positive, locations = ~state,
+    text = ~ text,
+    color = ~positive, colors = 'Reds') %>% 
+  plotly::colorbar(title = "Number of Cases") %>%
+  plotly::layout(title = 'US Number of Positive Cases',
+    geo = g) 
+
+p2 <-  coronavirus::coronavirus %>%
+  dplyr::filter(Country.Region == "US") %>%
+  dplyr::group_by(Province.State, type) %>%
+  dplyr::summarise(total = sum(cases)) %>%
+  dplyr::ungroup() %>%
+  tidyr::pivot_wider(names_from = type,
+                     values_from = total) %>%
+  dplyr::mutate(active = confirmed - death - recovered) %>%
+  dplyr::arrange(-confirmed) %>%
+  dplyr::top_n(n = 20) %>%
+  dplyr::mutate(state = factor(Province.State, levels = Province.State)) %>%
+  plotly::plot_ly(y = ~state, 
+                  x = ~ active, 
+                  orientation = 'h',
+                  text =  ~ active,
+                  textposition = 'auto',
+                  type = "bar", 
+                  name = "Active",
+                  marker = list(color = "#1f77b4")) %>%
+  plotly::add_trace(x = ~ recovered,
+                    text =  ~ recovered,
+                    textposition = 'auto',
+                    name = "Recovered",
+                    marker = list(color = "forestgreen")) %>%
+  plotly::add_trace(x = ~ death, 
+                    text =  ~ death,
+                    textposition = 'auto',
+                    name = "Death",
+                    marker = list(color = "red")) %>%
+  plotly::layout(title = "Cases Distribution by State (Top 20)",
+                 barmode = 'stack',
+                 yaxis = list(title = "State"),
+                 xaxis = list(title = "Number of Cases"),
+                 hovermode = "compare",
+                 legend = list(x = 0.65, y = 0.9),
+                 margin =  list(
+                   l = 20,
+                   r = 10,
+                   b = 10,
+                   t = 30,
+                   pad = 2
+                 ))
+
+
+plotly::subplot(p2, p1, nrows = 1)
 ```
 
-Column {data-width=350}
------------------------------------------------------------------------
 
-### Chart B
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Map
+=======================================================================
+
+**Map**
 
 ```{r}
-
+# map tab added by Art Steinmetz
+library(leaflet)
+library(leafpop)
+library(purrr)
+cv_data_for_plot <- coronavirus %>% 
+  dplyr::filter(Country.Region == "US") %>% 
+  dplyr::group_by(Province.State,Lat,Long,type) %>% 
+  dplyr::summarise(cases = sum(cases)) %>% 
+  dplyr::mutate(log_cases = 2 * log(cases)) %>% 
+  dplyr::ungroup()
+cv_data_for_plot.split <- cv_data_for_plot %>% split(cv_data_for_plot$type)
+pal <- colorFactor(c("orange", "red","green"), domain = c("confirmed", "death","recovered"))
+map_object <- leaflet() %>% addProviderTiles(providers$Stamen.Toner)
+names(cv_data_for_plot.split) %>%
+  purrr::walk( function(df) {
+    map_object <<- map_object %>%
+      addCircleMarkers(data=cv_data_for_plot.split[[df]],
+                 lng=~Long, lat=~Lat,
+#                 label=~as.character(cases),
+                 color = ~pal(type),
+                 stroke = FALSE,
+                 fillOpacity = 0.8,
+                 radius = ~log_cases,
+                 popup =  leafpop::popupTable(cv_data_for_plot.split[[df]],
+                                              feature.id = FALSE,
+                                              row.numbers = FALSE,
+                                              zcol=c("type","cases","Province.State")),
+                 group = df,
+#                 clusterOptions = markerClusterOptions(removeOutsideVisibleBounds = F),
+                 labelOptions = labelOptions(noHide = F,
+                                             direction = 'auto'))
+  })
+map_object %>%
+  addLayersControl(
+    overlayGroups = names(cv_data_for_plot.split),
+    options = layersControlOptions(collapsed = FALSE) 
+  )
 ```
 
-### Chart C
 
-```{r}
 
-```
 
 
